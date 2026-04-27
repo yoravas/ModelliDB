@@ -1,7 +1,8 @@
 ﻿USE Deleghe2
 GO
 
-IF DB_NAME() <> N'Deleghe2' SET NOEXEC ON
+IF DB_NAME() <> N'Deleghe2'
+  SET NOEXEC ON
 GO
 
 SET QUOTED_IDENTIFIER, ANSI_NULLS ON
@@ -244,7 +245,7 @@ BEGIN
     SET @ID_TIPO_DELEGA = 0;
     SET @SET_TIPO_MOVIMENTO_ID = 0;
     SET @MOV_DELGHE_ID = 0;
-    SET @FK_MOV_DELEGHE_ID = null;
+    SET @FK_MOV_DELEGHE_ID = NULL;
 
     SET @ID_TIPO_DELEGA =
     CASE UPPER(LTRIM(RTRIM(@tipo_delega)))
@@ -269,6 +270,10 @@ BEGIN
       SET @IDOPERATORE = CONVERT(BIGINT, SCOPE_IDENTITY());
     END
 
+    -------------------------------------------------------------------------------------------------
+    -- Gestione della scadenza con la tipologia della delega ed inserimento delle movimentazioni
+    -------------------------------------------------------------------------------------------------
+
     EXEC dbo.sp_etl_tipo_scadenza @data_scadenza_delega
                                  ,@tipo_delega
                                  ,@data_operazione
@@ -279,6 +284,10 @@ BEGIN
                                  ,@MOV_DELGHE_ID OUTPUT;
 
     PRINT '@MOV_DELGHE_ID output da sp_etl_tipo_scadenza: ' + TRY_CONVERT(VARCHAR, @MOV_DELGHE_ID);
+
+    -------------------------------------------------------------------------------------------------
+    -- Storico del delegato
+    -------------------------------------------------------------------------------------------------
 
     EXEC dbo.sp_etl_ins_storico_dati_delegato @MOV_DELGHE_ID
                                              ,@CF_CAUNCFCCC1_delegato
@@ -297,6 +306,10 @@ BEGIN
                                              ,@CAP_RES_delegato
                                              ,@STATO_RES_delegato;
 
+    -------------------------------------------------------------------------------------------------
+    -- Storico dati del pensionato
+    -------------------------------------------------------------------------------------------------
+
     EXEC dbo.sp_etl_ins_storico_dati_pensionato @MOV_DELGHE_ID
                                                ,@codice_fiscale_pensionato
                                                ,@nome_pensionato
@@ -312,9 +325,21 @@ BEGIN
                                                ,@CapResidenza
                                                ,'-';
 
+    -------------------------------------------------------------------------------------------------
+    -- Prestazioni del pensionato
+    -------------------------------------------------------------------------------------------------
+
     EXEC dbo.sp_etl_ins_prestazioni_pensionato @MOV_DELGHE_ID
                                               ,@CHIAVE_OPERAZIONE
                                               ,@data_operazione;
+
+    ------------------------------------------------------------------------------------------------
+    -- Esito nuovo servizio che sostituisce warest
+    ------------------------------------------------------------------------------------------------
+
+    EXEC dbo.sp_etl_ins_esito_warest @MOV_DELGHE_ID
+                                    ,@IDOPERATORE
+                                    ,@esito_host;
 
     -------------------------------------------------------------------
     -- Incrementa contatore batch e commit a soglia
