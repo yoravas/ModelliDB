@@ -8,13 +8,10 @@ GO
 SET QUOTED_IDENTIFIER, ANSI_NULLS ON
 GO
 
---
--- Create or alter procedure [dbo].[sp_etl_old_to_new_deleghe_copy]
---
+PRINT (N'Create or alter procedure [dbo].[sp_etl_old_to_new_deleghe_START]')
 GO
-PRINT (N'Create or alter procedure [dbo].[sp_etl_old_to_new_deleghe_copy]')
-GO
-CREATE OR ALTER PROCEDURE dbo.sp_etl_old_to_new_deleghe_START (@Da DATE = null)
+
+CREATE OR ALTER PROCEDURE dbo.sp_etl_old_to_new_deleghe_START (@Da DATE = NULL)
 AS
 BEGIN
   SET NOCOUNT ON;
@@ -44,11 +41,16 @@ BEGIN
   -------------------------------------------------------------------------
   -- BATCHING: dimensione batch e contatori
   -------------------------------------------------------------------------
-  DECLARE @BatchSize INT = 500;      -- <<< limite commit
-  DECLARE @BatchCount INT = 0;       -- righe processate nel batch corrente
-  DECLARE @TranOpen BIT = 0;         -- indica se abbiamo una tran aperta
+  DECLARE @BatchSize INT = 500;
+  DECLARE @BatchCount INT = 0;
+  DECLARE @TranOpen BIT = 0;
 
-  SET @data_da_reale = ISNULL(@Da, '19000101');
+  -- Contesto utile in caso di errore (dove eri arrivato)
+  DECLARE @CTX_CHIAVE_OPERAZIONE VARCHAR(100) = NULL;
+  DECLARE @CTX_TIPO_OPERAZIONE VARCHAR(3) = NULL;
+  DECLARE @CTX_DATA_OPERAZIONE DATETIME = NULL;
+
+  SET @data_da_reale = ISNULL(@Da, CONVERT(DATE, '19000101'));
 
   PRINT 'Data nel parametro di ricerca: ' + CONVERT(VARCHAR(10), @data_da_reale, 23);
   PRINT '---------------------------------------';
@@ -141,6 +143,11 @@ BEGIN
       SET @BatchCount = 0;
     END
 
+    -- Aggiorno contesto (utile se esplode una SP figlia)
+    SET @CTX_CHIAVE_OPERAZIONE = @CHIAVE_OPERAZIONE;
+    SET @CTX_TIPO_OPERAZIONE = @TIPO_OPERAZIONE;
+    SET @CTX_DATA_OPERAZIONE = @data_operazione;
+
     -------------------------------------------------------------------
     -- Inizio elaborazione
     -------------------------------------------------------------------
@@ -178,12 +185,11 @@ BEGIN
     AND o.DATA_OPERAZIONE = @data_operazione
     AND o.CODICE_FISCALE_PENSIONATO = @codice_fiscale_pensionato;
 
-    -- ✅ Data minima se non convertibile
     SET @DATA_NASCITA_PENSIONATO_DT =
     COALESCE(
     TRY_CONVERT(DATETIME, @data_nascita_pensionato, 103),
     TRY_CONVERT(DATETIME, @data_nascita_pensionato, 120),
-    '19000101'
+    CONVERT(DATETIME, '19000101')
     );
 
     -------------------------------------------------------------------
@@ -208,8 +214,7 @@ BEGIN
      ,@NAUNPRG_delegato = dda.NAUNPRG
      ,@COGNOME_ACQ_delegato = dda.COGNOME_ACQ
      ,@DATA_NASCITA_delegato_raw = dda.DATA_NASCITA
-     ,     -- <- prendo raw stringa
-      @ComuneNascita_delegato = dda.DECO_COMU
+     ,@ComuneNascita_delegato = dda.DECO_COMU
      ,@PROV_NASCITA_delegato = dda.PROV_NASCITA
      ,@INDIRIZZO_RES_delegato = dda.INDIRIZZO_RES
      ,@COMUNE_RES_delegato = dda.COMUNE_RES
@@ -221,12 +226,11 @@ BEGIN
     WHERE dda.CHIAVE_OPERAZIONE = @CHIAVE_OPERAZIONE
     AND dda.CODICE_FISCALE_DEL = @codice_fiscale_delegato;
 
-    -- ✅ Converti in sicurezza + data minima
     SET @data_nascita_delegato_dt =
     COALESCE(
     TRY_CONVERT(DATETIME, @DATA_NASCITA_delegato_raw, 103),
     TRY_CONVERT(DATETIME, @DATA_NASCITA_delegato_raw, 120),
-    '19000101'
+    CONVERT(DATETIME, '19000101')
     );
 
     -------------------------------------------------------------------
@@ -245,9 +249,6 @@ BEGIN
            ,@MOV_DELGHE_ID BIGINT
            ,@FK_MOV_DELEGHE_ID BIGINT;
 
-    SET @ID_TIPO_DELEGA = 0;
-    SET @SET_TIPO_MOVIMENTO_ID = 0;
-    SET @MOV_DELGHE_ID = 0;
     SET @FK_MOV_DELEGHE_ID = NULL;
 
     SET @ID_TIPO_DELEGA =
@@ -265,6 +266,19 @@ BEGIN
       WHEN N'CAN' THEN 2
     END;
 
+    -- (Opzionale ma utile) blocco "input incoerente"
+    IF @ID_TIPO_DELEGA IS NULL
+    BEGIN
+      RAISERROR ('Tipo delega non gestito: %s (CHIAVE_OPERAZIONE=%s).', 16, 1, @tipo_delega, @CHIAVE_OPERAZIONE);
+      RETURN;
+    END
+
+    IF @SET_TIPO_MOVIMENTO_ID IS NULL
+    BEGIN
+      RAISERROR ('Tipo operazione non gestito: %s (CHIAVE_OPERAZIONE=%s).', 16, 1, @TIPO_OPERAZIONE, @CHIAVE_OPERAZIONE);
+      RETURN;
+    END
+
     IF @IDOPERATORE <= 0
     BEGIN
       INSERT INTO dbo.ND_Operatori (MatricolaOperatore, SedeCompetenza, RuoliID, EntiID)
@@ -272,10 +286,6 @@ BEGIN
 
       SET @IDOPERATORE = CONVERT(BIGINT, SCOPE_IDENTITY());
     END
-
-    -------------------------------------------------------------------------------------------------
-    -- Gestione della scadenza con la tipologia della delega ed inserimento delle movimentazioni
-    -------------------------------------------------------------------------------------------------
 
     EXEC dbo.sp_etl_tipo_scadenza @data_scadenza_delega
                                  ,@tipo_delega
@@ -287,10 +297,6 @@ BEGIN
                                  ,@MOV_DELGHE_ID OUTPUT;
 
     PRINT '@MOV_DELGHE_ID output da sp_etl_tipo_scadenza: ' + TRY_CONVERT(VARCHAR, @MOV_DELGHE_ID);
-
-    -------------------------------------------------------------------------------------------------
-    -- Storico del delegato
-    -------------------------------------------------------------------------------------------------
 
     EXEC dbo.sp_etl_ins_storico_dati_delegato @MOV_DELGHE_ID
                                              ,@CF_CAUNCFCCC1_delegato
@@ -309,10 +315,6 @@ BEGIN
                                              ,@CAP_RES_delegato
                                              ,@STATO_RES_delegato;
 
-    -------------------------------------------------------------------------------------------------
-    -- Storico dati del pensionato
-    -------------------------------------------------------------------------------------------------
-
     EXEC dbo.sp_etl_ins_storico_dati_pensionato @MOV_DELGHE_ID
                                                ,@codice_fiscale_pensionato
                                                ,@nome_pensionato
@@ -328,25 +330,13 @@ BEGIN
                                                ,@CapResidenza
                                                ,'-';
 
-    -------------------------------------------------------------------------------------------------
-    -- Prestazioni del pensionato
-    -------------------------------------------------------------------------------------------------
-
     EXEC dbo.sp_etl_ins_prestazioni_pensionato @MOV_DELGHE_ID
                                               ,@CHIAVE_OPERAZIONE
                                               ,@data_operazione;
 
-    ------------------------------------------------------------------------------------------------
-    -- Esito nuovo servizio che sostituisce warest
-    ------------------------------------------------------------------------------------------------
-
     EXEC dbo.sp_etl_ins_esito_warest @MOV_DELGHE_ID
                                     ,@IDOPERATORE
                                     ,@esito_host;
-
-    ------------------------------------------------------------------------------------------------
-    -- Documento storico
-    ------------------------------------------------------------------------------------------------
 
     EXEC dbo.sp_etl_ins_documenti @MOV_DELGHE_ID
                                  ,@ID_TIPO_DELEGA
@@ -391,7 +381,6 @@ BEGIN
     CLOSE curOperazioni;
     DEALLOCATE curOperazioni;
 
-    -- Commit ultimo batch rimasto aperto
     IF @TranOpen = 1
     BEGIN
       COMMIT TRAN;
@@ -399,17 +388,52 @@ BEGIN
     END
   END TRY
   BEGIN CATCH
-    -- chiusura cursor se necessario
-    IF CURSOR_STATUS('local', 'curOperazioni') >= -1
+    DECLARE @ErrNum INT = ERROR_NUMBER()
+           ,@ErrMsg NVARCHAR(4000) = ERROR_MESSAGE()
+           ,@ErrLine INT = ERROR_LINE()
+           ,@ErrProc NVARCHAR(200) = ERROR_PROCEDURE()
+           ,@XState INT = XACT_STATE();
+
+    -- 1) Chiudi/dealloca cursore in modo sicuro
+    DECLARE @cs INT = CURSOR_STATUS('local', 'curOperazioni');
+    IF @cs > -3
     BEGIN
-      CLOSE curOperazioni;
+      IF @cs > -1  -- open
+        CLOSE curOperazioni;
       DEALLOCATE curOperazioni;
     END
 
-    IF XACT_STATE() <> 0
+    -- 2) Rollback transazione batch (se esiste)
+    IF @XState = -1
+    BEGIN
+      -- transazione non committabile
       ROLLBACK TRAN;
+      SET @TranOpen = 0;
+    END
+    ELSE
+    IF @XState = 1
+    BEGIN
+      IF @TranOpen = 1
+        AND @@TRANCOUNT > 0
+      BEGIN
+        ROLLBACK TRAN;
+        SET @TranOpen = 0;
+      END
+    END
 
-    THROW;
+    -- 3) Messaggio dettagliato al chiamante (NO THROW)
+    DECLARE @RaisMsg NVARCHAR(4000) =
+    N'ERRORE ETL sp_etl_old_to_new_deleghe_START - ' +
+    N'Proc=' + ISNULL(@ErrProc, N'<n/a>') +
+    N', Line=' + CONVERT(NVARCHAR(10), @ErrLine) +
+    N', Err=' + CONVERT(NVARCHAR(10), @ErrNum) + N' - ' + @ErrMsg +
+    N' | CTX: CHIAVE_OPERAZIONE=' + ISNULL(@CTX_CHIAVE_OPERAZIONE, N'<null>') +
+    N', TIPO_OPERAZIONE=' + ISNULL(@CTX_TIPO_OPERAZIONE, N'<null>') +
+    N', DATA_OPERAZIONE=' + ISNULL(CONVERT(NVARCHAR(19), @CTX_DATA_OPERAZIONE, 120), N'<null>') +
+    N', BatchCount=' + CONVERT(NVARCHAR(10), @BatchCount);
+
+    RAISERROR (@RaisMsg, 16, 1);
+    RETURN;
   END CATCH
 END;
 GO
