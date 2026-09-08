@@ -1,0 +1,51 @@
+﻿SELECT DISTINCT
+  o.CHIAVE_OPERAZIONE
+ ,o.CODICE_OPERATORE
+ ,o.TIPO_OPERAZIONE AS tipoOperazioniTabOperazioni
+ ,o.ANNOMESE_COMPETENZA
+ ,o.DATA_OPERAZIONE
+ ,o.CODICE_FISCALE_PENSIONATO
+ ,RTRIM(o.CF_CAUNCFCCC1) AS ChiaveArca
+ ,RTRIM(o.NAUNPRG) AS ProgressivoArca
+ ,o.COGNOME_PENSIONATO
+ ,o.NOME_PENSIONATO
+ ,o.DATA_NASCITA_PENSIONATO
+ ,o.ESITO_HOST
+ ,dda.CODICE_FISCALE_DEL
+ ,dda.COGNOME AS CognomeDelegato
+ ,dda.NOME AS NomeDelegato
+ ,t32.CCMPTIP AS TipoDelega
+ ,t32.MRVSFAMSCA AS DataScadenzaDelega
+ ,t32.TIPO_OPERAZIONE AS TipoOperazione
+FROM dbo.DEL_LOG_OPERAZIONI AS o
+INNER JOIN dbo.DEL_LOG_DATIDELANAGRAFICI AS dda
+  ON o.CHIAVE_OPERAZIONE = dda.CHIAVE_OPERAZIONE
+INNER JOIN dbo.DEL_LOG_T32 AS t32
+  ON t32.CHIAVE_OPERAZIONE = dda.CHIAVE_OPERAZIONE
+WHERE 1 = 1
+AND o.DATA_OPERAZIONE >= CONVERT(DATE, '19000101')
+AND LTRIM(RTRIM(t32.TIPO_OPERAZIONE)) IN ('INS', 'CAN')
+AND NOT EXISTS (SELECT
+    1
+  FROM dbo.ND_ChiaveOperazioneStorico AS cos
+  WHERE 1 = 1
+  AND cos.ChiaveOperazione = o.CHIAVE_OPERAZIONE
+  AND cos.CodiceOperatore = o.CODICE_OPERATORE
+  AND cos.TipoOperazioniTabOperazioni = o.TIPO_OPERAZIONE
+  AND cos.AnnoMeseCompetenza = o.ANNOMESE_COMPETENZA
+  AND cos.DataOperazione = o.DATA_OPERAZIONE
+  AND cos.CodiceFiscalePensionato = o.CODICE_FISCALE_PENSIONATO
+  AND cos.ChiaveArca = RTRIM(o.CF_CAUNCFCCC1)
+  AND cos.ProgressivoArca = RTRIM(o.NAUNPRG)
+  AND cos.CognomePensionato = o.COGNOME_PENSIONATO
+  AND cos.NomePensionato = o.NOME_PENSIONATO
+  AND cos.DataNascitaPensionato = o.DATA_NASCITA_PENSIONATO
+  AND cos.EsitoHost = o.ESITO_HOST
+  AND cos.CodiceFiscaleDelegato = dda.CODICE_FISCALE_DEL
+  AND cos.CognomeDelegato = dda.COGNOME
+  AND cos.NomeDelegato = dda.NOME
+  AND cos.TipoDelega = t32.CCMPTIP
+  AND cos.DataScadenzaDelega = t32.MRVSFAMSCA
+  AND cos.TipoOperazione = t32.TIPO_OPERAZIONE)
+--AND dda.CHIAVE_OPERAZIONE = '0mduesmutmav4afngis3pcqu20170119120108'   
+ORDER BY o.CHIAVE_OPERAZIONE, o.DATA_OPERAZIONE DESC

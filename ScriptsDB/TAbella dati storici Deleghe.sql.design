@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- Devart (www.devart.com), SQL document design file -->
+<!-- Modifying this generated file will probably render it invalid -->
+<Document>
+  <Properties>
+    <Type>SQL Document Design</Type>
+    <DatabaseProvider>aa8afe9c-7d62-4564-b477-c12e62e0f440</DatabaseProvider>
+    <ProviderVersion>2025.3.61.0</ProviderVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+  </Properties>
+  <Connection>
+    <ConnectionModel>
+      <PropertyValue Name="Database">aa8afe9c-7d62-4564-b477-c12e62e0f440</PropertyValue>
+      <PropertyValue Name="Id">8d4b1124-d58a-416d-b324-c9b230318a67</PropertyValue>
+      <PropertyValue Name="ConnectionString" xml:space="preserve">Data Source=SQLINPSSVIL15,2434;Encrypt=False;Initial Catalog=Deleghe2;Integrated Security=False;User ID=Deleghe2</PropertyValue>
+    </ConnectionModel>
+    <Database>Deleghe2</Database>
+  </Connection>
+  <Views ShowAdditionalViews="False" IsLayoutActiveAttribute="True" MainViewAttribute="Code" MainViewScale="57">
+    <View Name="Design" Visible="False" />
+    <View Name="Code" Active="True" Visible="True">
+      <Data />
+    </View>
+    <View Name="Data" Visible="True" />
+    <View Name="Profiler" Visible="False" />
+    <View Name="PivotGrid" Visible="False" />
+  </Views>
+  <LiveProfilingMode Enabled="False" />
+</Document>
